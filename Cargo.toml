@@ -2,6 +2,9 @@
 name = "ground-truth-cli-rust"
 version = "0.1.0"
 edition = "2024"
+description = "A high-performance Rust reimplementation of the ground-truth-cli MCP server."
+license = "MIT"
+repository = "https://github.com/benjamesmurray/ground-truth-cli-rust"
 
 [dependencies]
 tokio = { version = "1.0", features = ["full"] }
