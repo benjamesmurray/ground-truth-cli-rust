@@ -1,0 +1,100 @@
+{
+  "rule_registry": [
+    {
+      "id": "Rust-001",
+      "trigger": "Processing complex data structures (String, Vec<T>), designing API parameter types, or resolving borrow checker lifetime errors.",
+      "behavior": "Prohibit taking ownership or invoking .clone() if read access is sufficient. Use immutable references (&str, &[T]) instead of owned types (String, Vec<T>). Explicitly eliminate excessive .clone() operations inside iterator chains to avoid unnecessary heap allocations.",
+      "example": {
+        "incorrect": "fn format_tasks(tasks: Vec<String>) -> Vec<String> {\n    tasks.iter().map(|s| {\n        let mut ns = s.clone();\n        ns.push_str(\"!\");\n        ns\n    }).collect()\n}",
+        "correct": "fn format_tasks(tasks: &[String]) -> Vec<String> {\n    tasks.iter().map(|s| format!(\"{}!\", s)).collect()\n}"
+      }
+    },
+    {
+      "id": "Rust-002",
+      "trigger": "Managing shared state across asynchronous tasks or defining locking mechanisms in a Tokio environment.",
+      "behavior": "Never hold a standard library std::sync::MutexGuard or RwLockGuard across an .await point. If a lock must be held while awaiting an I/O operation, use tokio::sync::Mutex.[2] For brief updates, use std::sync::Mutex but ensure the guard is dropped before the await.",
+      "example": {
+        "incorrect": "async fn process(data: Arc<std::sync::Mutex<State>>) {\n    let mut lock = data.lock().unwrap();\n    lock.prepare();\n    fetch_external_api().await;\n    lock.finalize();\n}",
+        "correct": "async fn process(data: Arc<std::sync::Mutex<State>>) {\n    {\n        let mut lock = data.lock().unwrap();\n        lock.prepare();\n    } // Guard is dropped here\n    fetch_external_api().await;\n    {\n        let mut lock = data.lock().unwrap();\n        lock.finalize();\n    }\n}"
+      }
+    },
+    {
+      "id": "Rust-003",
+      "trigger": "Defining error structures, implementing fallible functions, or specifying the return type of a module's public API.",
+      "behavior": "Enforce the library vs. application dichotomy. Use 'thiserror' for structured enums in library crates to allow pattern matching. Use 'anyhow' for application binaries and top-level routing to provide context-rich propagation without boilerplate.",
+      "example": {
+        "incorrect": "// Library API\npub fn parse_config(data: &str) -> anyhow::Result<Config> { ... }",
+        "correct": "// Library API\n#[derive(thiserror::Error, Debug)]\npub enum ConfigError {\n    #[error(\"Invalid syntax at line {0}\")]\n    Syntax(usize),\n}\npub fn parse_config(data: &str) -> Result<Config, ConfigError> { ... }"
+      }
+    },
+    {
+      "id": "Rust-004",
+      "trigger": "Implementing polymorphism over a known, closed set of variants.",
+      "behavior": "Avoid trait objects (Box<dyn Trait>) for closed systems. Use enums combined with pattern matching to guarantee static dispatch, exhaustive checking, and continuous cache locality.",
+      "example": {
+        "incorrect": "trait Shape { fn area(&self) -> f64; }\nfn total_area(shapes: &[Box<dyn Shape>]) -> f64 { ... }",
+        "correct": "enum Shape { Circle(f64), Square(f64) }\nimpl Shape {\n    fn area(&self) -> f64 {\n        match self {\n            Shape::Circle(r) => 3.14 * r * r,\n            Shape::Square(l) => l * l\n        }\n    }\n}"
+      }
+    },
+    {
+      "id": "Rust-005",
+      "trigger": "Initializing a firmware project, writing hardware abstraction layers, or modifying files marked with #![no_std].",
+      "behavior": "Eliminate all references to the standard library (std). Use core or alloc equivalents.[2] Prohibit crates that depend on OS runtimes (tokio, reqwest). Utilize 'heapless' for fixed-capacity, stack-allocated collections.",
+      "example": {
+        "incorrect": "#![no_std]\nuse std::collections::HashMap;\nfn process() {\n    let mut buffer = Vec::new();\n}",
+        "correct": "#![no_std]\nuse heapless::Vec;\nfn process() {\n    let mut buffer: Vec<u8, 64> = Vec::new();\n}"
+      }
+    },
+    {
+      "id": "Rust-006",
+      "trigger": "Processing massive arrays or numerical datasets where CPU-bound operations are the bottleneck.",
+      "behavior": "Replace sequential iterators (.iter()) with Rayon parallel iterators (.par_iter()) to distribute workloads across cores. Avoid nesting parallel iterators to prevent synchronization overhead.",
+      "example": {
+        "incorrect": "let results: Vec<f64> = massive_dataset.iter().map(|x| heavy_compute(x)).collect();",
+        "correct": "use rayon::prelude::*;\nlet results: Vec<f64> = massive_dataset.par_iter().map(|x| heavy_compute(x)).collect();"
+      }
+    },
+    {
+      "id": "Rust-007",
+      "trigger": "Parsing system arguments, handling environment variables, or defining the main entry point logic for a CLI application.",
+      "behavior": "Do not parse arguments manually using std::env::args(). Use 'clap' with the Parser derive macro for declarative argument handling.[2] Return anyhow::Result<()> from main for automatic error formatting.",
+      "example": {
+        "incorrect": "fn main() {\n    let args: Vec<String> = std::env::args().collect();\n    if args.len() > 1 && args[1] == \"--verbose\" { ... }\n}",
+        "correct": "use clap::Parser;\n#[derive(Parser)]\nstruct Cli { #[arg(short, long)] verbose: bool }\nfn main() -> anyhow::Result<()> {\n    let cli = Cli::parse();\n    if cli.verbose { println!(\"Verbose mode\"); }\n    Ok(())\n}"
+      }
+    },
+    {
+      "id": "Rust-008",
+      "trigger": "Generating FFI bindings or high-performance Rust processing pipelines to be consumed by Python.",
+      "behavior": "Avoid manual C-ABI extern functions and raw pointer management. Use the PyO3 framework with #[pyfunction] and #[pyclass] macros to automatically handle GIL and safe memory translation.",
+      "example": {
+        "incorrect": "#[no_mangle]\npub extern \"C\" fn process_data(ptr: *const c_char) -> *mut c_char { ... }",
+        "correct": "use pyo3::prelude::*;\n#[pyfunction]\nfn process_data(input: &str) -> PyResult<String> {\n    Ok(format!(\"Processed: {}\", input))\n}"
+      }
+    }
+  ],
+  "architecture_map": {
+    "Asynchronous_Web_Microservices": [
+      "Rust-001",
+      "Rust-002",
+      "Rust-003",
+      "Rust-004"
+    ],
+    "Embedded_Bare_Metal_no_std": [
+      "Rust-001",
+      "Rust-004",
+      "Rust-005"
+    ],
+    "High_Performance_Parallel_Data": [
+      "Rust-001",
+      "Rust-004",
+      "Rust-006",
+      "Rust-008"
+    ],
+    "Command_Line_Interfaces": [
+      "Rust-001",
+      "Rust-003",
+      "Rust-007"
+    ]
+  }
+}
