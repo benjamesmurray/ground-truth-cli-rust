@@ -90,7 +90,7 @@ async fn main() -> SdkResult<()> {
     let server_info = InitializeResult {
         server_info: Implementation {
             name: "ground-truth-cli-rust".into(),
-            version: "0.1.0".into(),
+            version: "0.1.1".into(),
             description: Some("A high-performance Rust reimplementation of the ground-truth-cli MCP server.".into()),
             icons: vec![],
             website_url: Some("https://github.com/benjamesmurray/ground-truth-cli-rust".into()),
@@ -100,7 +100,7 @@ async fn main() -> SdkResult<()> {
             tools: Some(ServerCapabilitiesTools { list_changed: Some(false) }),
             ..Default::default()
         },
-        protocol_version: ProtocolVersion::V2024_11_05.into(),
+        protocol_version: ProtocolVersion::V2025_11_25.into(),
         instructions: None,
         meta: None,
     };
