@@ -1,196 +1,123 @@
 mod scanner;
 mod rules;
 
-use std::io::{self, BufRead, Write};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
+use async_trait::async_trait;
+use rust_mcp_sdk::{
+    *,
+    error::SdkResult,
+    macros,
+    mcp_server::{server_runtime, ServerHandler, McpServerOptions},
+    schema::*,
+};
 use crate::scanner::scan_project;
 use crate::rules::synthesize_rules;
 use std::path::Path;
+use std::sync::Arc;
 
-#[derive(Debug, Deserialize)]
-struct JsonRpcRequest {
-    jsonrpc: String,
-    id: Option<serde_json::Value>,
-    method: String,
-    params: Option<serde_json::Value>,
+#[macros::mcp_tool(
+    name = "gt_status",
+    description = "Returns the current project state and detection results."
+)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, macros::JsonSchema)]
+pub struct GtStatusTool {}
+
+#[macros::mcp_tool(
+    name = "gt_exec_scan",
+    description = "Runs the scanner and generates the .assistant_rules.toon file."
+)]
+#[derive(Debug, serde::Deserialize, serde::Serialize, macros::JsonSchema)]
+pub struct GtExecScanTool {
+    /// The path to scan (defaults to current directory).
+    pub path: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
-struct JsonRpcResponse {
-    jsonrpc: String,
-    id: serde_json::Value,
-    result: Option<serde_json::Value>,
-    error: Option<serde_json::Value>,
+#[derive(Default)]
+struct GtHandler;
+
+#[async_trait]
+impl ServerHandler for GtHandler {
+    async fn handle_list_tools_request(
+        &self,
+        _request: Option<PaginatedRequestParams>,
+        _runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<ListToolsResult, RpcError> {
+        Ok(ListToolsResult {
+            tools: vec![GtStatusTool::tool(), GtExecScanTool::tool()],
+            meta: None,
+            next_cursor: None,
+        })
+    }
+
+    async fn handle_call_tool_request(
+        &self,
+        params: CallToolRequestParams,
+        _runtime: Arc<dyn McpServer>,
+    ) -> std::result::Result<CallToolResult, CallToolError> {
+        match params.name.as_str() {
+            "gt_status" => {
+                let context = scan_project(Path::new("."));
+                Ok(CallToolResult::text_content(vec![
+                    format!("Project Status:\nLanguage: {:?}\nFramework: {:?}\nBuild System: {:?}\nTest Framework: {:?}", 
+                        context.language, context.framework, context.build_system, context.test_framework).into()
+                ]))
+            },
+            "gt_exec_scan" => {
+                let args: GtExecScanTool = serde_json::from_value(serde_json::Value::Object(params.arguments.unwrap_or_default()))
+                    .map_err(|e| CallToolError::invalid_arguments("gt_exec_scan", Some(format!("Invalid arguments: {}", e))))?;
+                
+                let scan_path = args.path.as_deref().unwrap_or(".");
+                let context = scan_project(Path::new(scan_path));
+                let output_path = Path::new(scan_path).join(".assistant_rules.toon");
+                
+                match synthesize_rules(&context, &output_path) {
+                    Ok(_) => {
+                        Ok(CallToolResult::text_content(vec![
+                            format!("Successfully scanned project and generated {}", output_path.display()).into()
+                        ]))
+                    },
+                    Err(e) => {
+                        Err(CallToolError::from_message(format!("Failed to synthesize rules: {}", e)))
+                    }
+                }
+            },
+            _ => Err(CallToolError::unknown_tool(params.name)),
+        }
+    }
 }
 
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    let stdin = io::stdin();
-    let mut reader = stdin.lock();
-    let mut stdout = io::stdout();
+async fn main() -> SdkResult<()> {
+    let server_info = InitializeResult {
+        server_info: Implementation {
+            name: "ground-truth-cli-rust".into(),
+            version: "0.1.0".into(),
+            description: Some("A high-performance Rust reimplementation of the ground-truth-cli MCP server.".into()),
+            icons: vec![],
+            website_url: Some("https://github.com/benjamesmurray/ground-truth-cli-rust".into()),
+            title: Some("Ground Truth CLI".into()),
+        },
+        capabilities: ServerCapabilities {
+            tools: Some(ServerCapabilitiesTools { list_changed: Some(false) }),
+            ..Default::default()
+        },
+        protocol_version: ProtocolVersion::V2024_11_05.into(),
+        instructions: None,
+        meta: None,
+    };
 
-    loop {
-        let mut line = String::new();
-        if reader.read_line(&mut line)? == 0 {
-            break;
-        }
-
-        let request: JsonRpcRequest = match serde_json::from_str(&line) {
-            Ok(req) => req,
-            Err(_) => continue,
-        };
-
-        let response = handle_request(request).await;
-        let response_str = serde_json::to_string(&response)? + "\n";
-        stdout.write_all(response_str.as_bytes())?;
-        stdout.flush()?;
-    }
-
-    Ok(())
-}
-
-async fn handle_request(request: JsonRpcRequest) -> JsonRpcResponse {
-    let id = request.id.unwrap_or(json!(null));
+    let transport = StdioTransport::new(TransportOptions::default())?;
+    let handler = GtHandler::default().to_mcp_server_handler();
     
-    match request.method.as_str() {
-        "initialize" => {
-            JsonRpcResponse {
-                jsonrpc: "2.0".to_string(),
-                id,
-                result: Some(json!({
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {
-                        "tools": {
-                            "listChanged": false
-                        }
-                    },
-                    "serverInfo": {
-                        "name": "ground-truth-cli-rust",
-                        "version": "0.1.0"
-                    }
-                })),
-                error: None,
-            }
-        },
-        "tools/list" => {
-            JsonRpcResponse {
-                jsonrpc: "2.0".to_string(),
-                id,
-                result: Some(json!({
-                    "tools": [
-                        {
-                            "name": "gt_status",
-                            "description": "Returns the current project state and detection results.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {}
-                            }
-                        },
-                        {
-                            "name": "gt_exec_scan",
-                            "description": "Runs the scanner and generates the .assistant_rules.toon file.",
-                            "inputSchema": {
-                                "type": "object",
-                                "properties": {
-                                    "path": {
-                                        "type": "string",
-                                        "description": "The path to scan (defaults to current directory)."
-                                    }
-                                }
-                            }
-                        }
-                    ]
-                })),
-                error: None,
-            }
-        },
-        "tools/call" => {
-            let tool_name = request.params.as_ref()
-                .and_then(|p| p.get("name"))
-                .and_then(|n| n.as_str())
-                .unwrap_or("");
-            
-            let args = request.params.as_ref()
-                .and_then(|p| p.get("arguments"))
-                .cloned()
-                .unwrap_or(json!({}));
+    let options = McpServerOptions {
+        server_details: server_info,
+        transport,
+        handler,
+        task_store: None,
+        client_task_store: None,
+        message_observer: None,
+    };
 
-            match tool_name {
-                "gt_status" => {
-                    let context = scan_project(Path::new("."));
-                    JsonRpcResponse {
-                        jsonrpc: "2.0".to_string(),
-                        id,
-                        result: Some(json!({
-                            "content": [
-                                {
-                                    "type": "text",
-                                    "text": format!("Project Status:\nLanguage: {:?}\nFramework: {:?}\nBuild System: {:?}\nTest Framework: {:?}", 
-                                        context.language, context.framework, context.build_system, context.test_framework)
-                                }
-                            ]
-                        })),
-                        error: None,
-                    }
-                },
-                "gt_exec_scan" => {
-                    let scan_path = args.get("path").and_then(|p| p.as_str()).unwrap_or(".");
-                    let context = scan_project(Path::new(scan_path));
-                    let output_path = Path::new(scan_path).join(".assistant_rules.toon");
-                    
-                    match synthesize_rules(&context, &output_path) {
-                        Ok(_) => {
-                            JsonRpcResponse {
-                                jsonrpc: "2.0".to_string(),
-                                id,
-                                result: Some(json!({
-                                    "content": [
-                                        {
-                                            "type": "text",
-                                            "text": format!("Successfully scanned project and generated {}", output_path.display())
-                                        }
-                                    ]
-                                })),
-                                error: None,
-                            }
-                        },
-                        Err(e) => {
-                            JsonRpcResponse {
-                                jsonrpc: "2.0".to_string(),
-                                id,
-                                result: None,
-                                error: Some(json!({
-                                    "code": -32000,
-                                    "message": format!("Failed to synthesize rules: {}", e)
-                                })),
-                            }
-                        }
-                    }
-                },
-                _ => {
-                    JsonRpcResponse {
-                        jsonrpc: "2.0".to_string(),
-                        id,
-                        result: None,
-                        error: Some(json!({
-                            "code": -32601,
-                            "message": "Method not found"
-                        })),
-                    }
-                }
-            }
-        },
-        _ => {
-            JsonRpcResponse {
-                jsonrpc: "2.0".to_string(),
-                id,
-                result: None,
-                error: Some(json!({
-                    "code": -32601,
-                    "message": "Method not found"
-                })),
-            }
-        }
-    }
+    let server = server_runtime::create_server(options);
+    
+    server.start().await
 }

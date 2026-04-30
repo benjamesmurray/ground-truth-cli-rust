@@ -19,6 +19,14 @@ A high-performance Rust reimplementation of the `ground-truth-cli` Model Context
 cargo install ground-truth-cli-rust
 ```
 
+## Building from Source
+
+```bash
+git clone https://github.com/benjamesmurray/ground-truth-cli-rust
+cd ground-truth-cli-rust
+cargo build --release
+```
+
 ## Usage as MCP Server
 
 Add this to your MCP settings (e.g., in Claude Desktop configuration):
