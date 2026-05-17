@@ -29,6 +29,10 @@ pub struct GtStatusTool {}
 pub struct GtExecScanTool {
     /// The path to scan (defaults to current directory).
     pub path: Option<String>,
+    /// User's current intent (e.g., 'debugging', 'refactoring', 'new_feature').
+    pub intent: Option<String>,
+    /// Whether to include expert developer guidance.
+    pub include_guidance: Option<bool>,
 }
 
 #[derive(Default)]
@@ -69,7 +73,7 @@ impl ServerHandler for GtHandler {
                 let context = scan_project(Path::new(scan_path));
                 let output_path = Path::new(scan_path).join(".assistant_rules.toon");
                 
-                match synthesize_rules(&context, &output_path) {
+                match synthesize_rules(&context, &output_path, args.intent.as_deref(), args.include_guidance.unwrap_or(false)) {
                     Ok(_) => {
                         Ok(CallToolResult::text_content(vec![
                             format!("Successfully scanned project and generated {}", output_path.display()).into()

@@ -1,36 +1,20 @@
-# Ground Truth CLI (Rust)
+# ground-truth-cli-rust
 
-A high-performance Rust reimplementation of the `ground-truth-cli` Model Context Protocol (MCP) server.
-
-## Overview
-
-`ground-truth-cli-rust` is an Agent-Native MCP server designed to synthesize "Ground Truth" rules for AI coding assistants. It scans your project's context (dependencies, language, architecture) and generates a `.assistant_rules.toon` file that provides rigid behavioral constraints for the AI.
+High-performance Rust reimplementation of the `ground-truth-cli` Model Context Protocol (MCP) server. Generates `.assistant_rules.toon` files to provide context-aware behavioral constraints for AI assistants.
 
 ## Features
-
-- **Agent-Native Design:** Optimized for minimal initial token footprint.
-- **TOON Format:** Outputs rules in Token-Oriented Object Notation to reduce context usage.
-- **Auto-Discovery:** Automatically detects languages (Rust, TypeScript) and architectural domains (Tokio, Next.js, Fastify, etc.).
-- **Embedded Rules:** Permanent rule files are embedded directly into the binary for a single-binary distribution.
+- **Agent-Native:** Minimal initial token footprint.
+- **Dynamic Ranking:** Injects only the top 3-5 most critical rules based on intent.
+- **Lazy-Load Guidance:** Expert developer guidance loaded only on demand.
+- **Auto-Discovery:** Detects language (Rust, TypeScript) and framework/architecture.
 
 ## Installation
-
 ```bash
 cargo install ground-truth-cli-rust
 ```
 
-## Building from Source
-
-```bash
-git clone https://github.com/benjamesmurray/ground-truth-cli-rust
-cd ground-truth-cli-rust
-cargo build --release
-```
-
-## Usage as MCP Server
-
-Add this to your MCP settings (e.g., in Claude Desktop configuration):
-
+## Setup (Claude Desktop)
+Add the server to your MCP settings (`claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
@@ -42,11 +26,17 @@ Add this to your MCP settings (e.g., in Claude Desktop configuration):
 }
 ```
 
-### Available Tools
+## Tools
+- `gt_status`: Returns current project state and framework detection.
+- `gt_exec_scan`: Scans project and generates `.assistant_rules.toon`.
+  - **Args:**
+    - `path` (optional): Directory to scan. Default: `.`
+    - `intent` (optional): Current task intent (e.g., "debugging", "refactoring") to rank rules.
+    - `include_guidance` (optional): `true` to append expert developer guidance. Default: `false`.
 
-- `gt_status`: Returns the current project state and detection results.
-- `gt_exec_scan`: Runs the scanner and generates the `.assistant_rules.toon` file.
-
-## License
-
-MIT
+## Building
+```bash
+git clone https://github.com/benjamesmurray/ground-truth-cli-rust
+cd ground-truth-cli-rust
+cargo build --release
+```

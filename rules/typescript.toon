@@ -1,106 +1,58 @@
 {
   "rule_registry": [
     {
-      "id": "TS-001",
-      "trigger": "Whenever iterating over an array structure or collection of data.",
-      "behavior": "Never use for...in on arrays. Always use for...of to iterate over values safely, or utilize standard functional methods like .map() and .filter().",
-      "example": {
-        "incorrect": "for (const i in items) {\n    process(items[i]);\n}",
-        "correct": "for (const item of items) {\n    process(item);\n}"
-      }
+      "id": "TS1",
+      "trigger": "array iteration",
+      "behavior": "No for...in. Use for...of or .map()/.filter().",
+      "example": "Correct: for (const x of items)"
     },
     {
-      "id": "TS-002",
-      "trigger": "Writing functions that handle external I/O, file system parsing, or non-deterministic API calls.",
-      "behavior": "Do not use throw new Error(). Implement a Discriminated Union Result type returning { success: true, data: T } or { success: false, error: Error } to enforce compiler error checking.",
-      "example": {
-        "incorrect": "try {\n    return parse(data);\n} catch (e) {\n    throw new Error(e);\n}",
-        "correct": "type Result<T> = { ok: true, val: T } | { ok: false, err: Error };\nreturn parseSafe(data);"
-      }
+      "id": "TS2",
+      "trigger": "I/O, fallible calls",
+      "behavior": "No throw. Return Result union: {ok:true, val:T} | {ok:false, err:E}.",
+      "example": "Correct: return { ok: true, val: data };"
     },
     {
-      "id": "TS-003",
-      "trigger": "Processing untyped data from external sources, API responses, or JSON parsing.",
-      "behavior": "Do not use the any type or as assertions. Declare dynamic inputs as unknown and validate them via Zod schemas or custom 'is' Type Guards.",
-      "example": {
-        "incorrect": "const data = req.body as unknown as User;",
-        "correct": "const data = UserSchema.parse(req.body);"
-      }
+      "id": "TS3",
+      "trigger": "external/untyped data",
+      "behavior": "No 'any' or 'as'. Use 'unknown' + Zod/Type Guards.",
+      "example": "Correct: Schema.parse(input);"
     },
     {
-      "id": "TS-004",
-      "trigger": "Defining distinct sets of constants, statuses, or configuration options.",
-      "behavior": "Never use TypeScript enums due to JavaScript compilation bloat and reverse mapping vulnerabilities. Use string literal discriminated unions exclusively.",
-      "example": {
-        "incorrect": "enum TaskState { Pending, Complete }",
-        "correct": "type TaskState = 'pending' | 'complete';"
-      }
+      "id": "TS4",
+      "trigger": "constants, status sets",
+      "behavior": "No enums. Use string literal unions.",
+      "example": "Correct: type S = 'on' | 'off';"
     },
     {
-      "id": "NEXT-001",
-      "trigger": "Implementing form submissions, data mutations, or database updates within the Next.js App Router architecture.",
-      "behavior": "Use the useActionState hook combined with a Zod-validated Server Action returning a strictly typed FormState object containing flattened field errors.",
-      "example": {
-        "incorrect": "const submit = async (data) => {\n    'use server';\n    await save(data);\n}",
-        "correct": "const [state, action] = useActionState(submitAction, null);"
-      }
+      "id": "N01",
+      "trigger": "Next.js forms, mutations",
+      "behavior": "useActionState + Zod-validated Server Action + FormState.",
+      "example": "Correct: const [s, a] = useActionState(f, n);"
     },
     {
-      "id": "AWS-001",
-      "trigger": "Writing AWS Lambda functions that interact with AWS cloud infrastructure.",
-      "behavior": "Never import the monolithic aws-sdk package. Import only the specific client module and the specific command object from @aws-sdk/client-* namespaces to optimize esbuild bundling and reduce cold starts.",
-      "example": {
-        "incorrect": "import AWS from 'aws-sdk';\nconst s3 = new AWS.S3();",
-        "correct": "import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';"
-      }
+      "id": "A01",
+      "trigger": "AWS Lambda, cloud",
+      "behavior": "No monolithic aws-sdk. Import specific clients/commands from @aws-sdk/client-*.",
+      "example": "Correct: import { S3Client } from '@aws-sdk/client-s3';"
     },
     {
-      "id": "FAST-001",
-      "trigger": "Creating an API endpoint, defining a handler, or writing middleware in Fastify.",
-      "behavior": "Apply the RouteGenericInterface to statically type the Body, Params, and Reply payloads. Do not mutate the core req object without declaration merging.",
-      "example": {
-        "incorrect": "fastify.post('/', (req, reply) => {\n    reply.send(req.body.id);\n});",
-        "correct": "fastify.post<RouteGeneric>('/', (req, reply) => {\n    reply.send(req.body.id);\n});"
-      }
+      "id": "F01",
+      "trigger": "Fastify endpoints",
+      "behavior": "Apply RouteGenericInterface for Body/Params/Reply. No 'req' mutation without declaration merging.",
+      "example": "Correct: fastify.post<Route>(...)"
     },
     {
-      "id": "AGENT-001",
-      "trigger": "Implementing LLM tool execution, managing non-deterministic model outputs, or orchestrating agentic workflows.",
-      "behavior": "Intercept and bridge all model outputs via strict Zod schema validation. Use Zod schemas for tool parameters as a firewall against hallucinations.[3] Implement state machines (e.g., ReAct loops) rather than ad-hoc recursion.",
-      "example": {
-        "incorrect": "const result = await model.generate(prompt);\nconst toolCall = JSON.parse(result);\nexecute(toolCall.name, toolCall.args);",
-        "correct": "const toolCall = ToolSchema.parse(await model.generate(prompt));\nawait execute(toolCall.name, toolCall.params);"
-      }
+      "id": "AG1",
+      "trigger": "LLM tools, agentic workflows",
+      "behavior": "Zod validation for all outputs/params. Use state machines (ReAct), not ad-hoc recursion.",
+      "example": "Correct: ToolSchema.parse(output);"
     }
   ],
   "architecture_map": {
-    "NextJS_App_Router": [
-      "TS-001",
-      "TS-002",
-      "TS-003",
-      "TS-004",
-      "NEXT-001"
-    ],
-    "AWS_Lambda_Serverless": [
-      "TS-001",
-      "TS-002",
-      "TS-003",
-      "TS-004",
-      "AWS-001"
-    ],
-    "Fastify_High_Performance_API": [
-      "TS-001",
-      "TS-002",
-      "TS-003",
-      "TS-004",
-      "FAST-001"
-    ],
-    "Agentic_Orchestration": [
-      "TS-001",
-      "TS-002",
-      "TS-003",
-      "TS-004",
-      "AGENT-001"
-    ]
+    "NextJS_App_Router": ["TS1", "TS2", "TS3", "TS4", "N01"],
+    "AWS_Lambda_Serverless": ["TS1", "TS2", "TS3", "TS4", "A01"],
+    "Fastify_High_Performance_API": ["TS1", "TS2", "TS3", "TS4", "F01"],
+    "Agentic_Orchestration": ["TS1", "TS2", "TS3", "TS4", "AG1"]
   }
 }
