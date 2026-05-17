@@ -1,6 +1,6 @@
 [package]
 name = "ground-truth-cli-rust"
-version = "0.1.2"
+version = "0.2.0"
 edition = "2024"
 description = "A high-performance Rust reimplementation of the ground-truth-cli MCP server."
 license = "MIT"
